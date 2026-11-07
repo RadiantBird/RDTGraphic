@@ -26,8 +26,12 @@ using namespace RDTGraphic;
 int main() {
     print("Welcome!\n");
 
+    DrawMode mode = DrawMode::Pixel;
+    const int width = 800;
+    const int height = 600;
+
     Renderer renderer = Renderer();
-    bool success = renderer.init();
+    bool success = renderer.init(width, height, mode);
     if (!success) {
         print("Initilaizing failed!");
         return 1;
@@ -53,11 +57,11 @@ int main() {
     }
 
     vector<Tria> triangles = {};
-    vector<char> ASCIIwords = {'H', 'e', 'l', 'l', 'o', '!'};
+    string ASCIIwords = "Hello!";
 
     for (int i = 0; char& c : ASCIIwords) {
         Contours contours = parser.getContoursOfASCIICodepoint(c);
-        float scale = parser.getFontScaleOf(0.5f);
+        float scale = parser.getFontScaleOf(150.0f);
 
         { // tess scope
         vector<Tria> t = tessa.getTrianglesFromContours(contours, scale, {-350.0f + (float)i * 125.0f, 0.0f});
@@ -72,9 +76,14 @@ int main() {
 
     // --------------------------------------------------
 
-    DrawMode mode = DrawMode::Pixel;
+    {
+        vector<Rect> rectangles = {
+            Rect()
+        };
+        renderer.registerRectangles(std::move(rectangles));
+    }
 
-    while (bool keepRendering = !renderer.draw(mode)) {
+    while (bool keepRendering = !renderer.draw()) {
         // just sleep...
     }
 

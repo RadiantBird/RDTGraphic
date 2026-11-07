@@ -8,6 +8,7 @@
 #include <GLFW/glfw3.h>
 
 #include "Triangle.hpp"
+#include "Elements.hpp"
 
 constexpr const char* VERTEX_SHADER = R"(
 #version 330 core
@@ -44,6 +45,7 @@ enum DrawMode {
 class Renderer {
     GLFWwindow* window = nullptr;
     vector<Tria> triangles = {};
+    vector<Rect> rectangles = {};
 
     GLuint program = 0; 
     GLint color_loc = -1;
@@ -53,11 +55,39 @@ class Renderer {
     int windowHeight = 600;
     int windowWidth  = 800;
 
+    DrawMode drawmode = DrawMode::NDC;
+
     void checkInitialized() {
         if (!window) {
             std::cerr << "Renderer Error: Maybe you called functions before calling init()!\n";
             std::exit(1);
         }
+    }
+
+    void registerTriangle(Tria& tria) {
+        glGenVertexArrays(1, &tria.vao_id);
+        glGenBuffers(1, &tria.vbo_id);
+
+        glBindVertexArray(tria.vao_id);
+        glBindBuffer(GL_ARRAY_BUFFER, tria.vbo_id);
+
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            sizeof(tria.vertices),
+            tria.vertices.data(),
+            GL_STATIC_DRAW
+        );
+
+        glVertexAttribPointer(
+            0,
+            2,
+            GL_FLOAT,
+            GL_FALSE,
+            2 * sizeof(float),
+            nullptr
+        );
+
+        glEnableVertexAttribArray(0);
     }
 
 public:
@@ -94,12 +124,12 @@ public:
         return shader;
     }
 
-    bool init(int width = 800, int height = 600) {
+    bool init(int width = 800, int height = 600, DrawMode m = DrawMode::NDC) {
         if (!glfwInit()) {
             std::cerr << "Failed to initialize GLFW\n";
             return false;
         }
-
+        drawmode = m;
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -177,36 +207,67 @@ public:
         triangles = std::move(v_triangles);
 
         for (auto& tria : triangles) {
-            glGenVertexArrays(1, &tria.vao_id);
-            glGenBuffers(1, &tria.vbo_id);
-
-            glBindVertexArray(tria.vao_id);
-            glBindBuffer(GL_ARRAY_BUFFER, tria.vbo_id);
-
-            glBufferData(
-                GL_ARRAY_BUFFER,
-                sizeof(tria.vertices),
-                tria.vertices.data(),
-                GL_STATIC_DRAW
-            );
-
-            glVertexAttribPointer(
-                0,
-                2,
-                GL_FLOAT,
-                GL_FALSE,
-                2 * sizeof(float),
-                nullptr
-            );
-
-            glEnableVertexAttribArray(0);
+            registerTriangle(tria);
         }
         
         glBindVertexArray(0);
     }
 
-    bool draw(DrawMode mode = DrawMode::NDC) {
+    void registerRectangles(vector<Rect>&& v_rectangles) {
+        checkInitialized();
+
+        rectangles = std::move(v_rectangles);
+
+        for (auto& rect : rectangles) {
+            registerTriangle(rect.t0);
+            registerTriangle(rect.t1);
+        }
+    }
+
+private:
+    void drawTriangle(const Tria& tria, int width, int height) {
         static bool warnOnce = false;
+
+        auto color = tria.color.to_array();
+
+        glUniform4fv(color_loc, 1, color.data());
+
+        if (drawmode == DrawMode::NDC) {
+            glUniform2f(
+                position_loc,
+                tria.position.x,
+                tria.position.y
+            );
+            glUniform2f(scale_loc, 1.0f, 1.0f);
+        }
+        else if (drawmode == DrawMode::Pixel) {
+            float pixelX = (float)windowWidth / 2.0f + tria.position.x;
+            float pixelY = (float)height - (float)windowHeight / 2.0f + tria.position.y;
+
+            glUniform2f(
+                position_loc,
+                // NDC is -1 ~ 1, so I doubled it
+                2.0f * pixelX / (float)width - 1.0f,
+                2.0f * pixelY / (float)height - 1.0f
+            );
+            glUniform2f(
+                scale_loc,
+                2.0f / (float)width,
+                2.0f / (float)height
+            );
+        }
+        else {
+            if (!warnOnce) {
+                print("Warning: Unknown draw mode recieved!\n");
+                warnOnce = true;
+            }
+        }
+
+        glBindVertexArray(tria.vao_id);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+public:
+    bool draw() {
         static bool zeroSizeWarn = false;
         checkInitialized();
 
@@ -217,72 +278,27 @@ public:
         glfwGetFramebufferSize(window, &width, &height);
         glViewport(0, 0, width, height);
 
-        if ((width == 0 || height == 0) && !zeroSizeWarn) {
-            print("Zero size is not allowed for window!\n");
-            zeroSizeWarn = true;
-            return false;
+        if (width == 0 || height == 0) {
+            if (!zeroSizeWarn) {
+                print("Zero size is not allowed for window!\n");
+                zeroSizeWarn = true;
+            }
+            return glfwWindowShouldClose(window); // Fixed: if in the zero conditions, user wasn't able to exit XD
         }
+        zeroSizeWarn = false; // Because it escaped from the zero conditions
 
         glClearColor(0.0f, 0.5f, 0.5f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(program);
 
-        switch (mode) {
-            case NDC: {
-                for (const auto& tria : triangles) {
-                    auto color = tria.color.to_array();
+        for (const auto& tria : triangles) {
+            drawTriangle(tria, width, height);
+        }
 
-                    glUniform4fv(color_loc, 1, color.data());
-                    glUniform2f(
-                        position_loc,
-                        tria.position.x,
-                        tria.position.y
-                    );
-
-                    glUniform2f(scale_loc, 1.0f, 1.0f);
-
-                    glBindVertexArray(tria.vao_id);
-                    glDrawArrays(GL_TRIANGLES, 0, 3);
-                }
-                
-                break;
-            }
-
-            case Pixel: {
-                for (const auto& tria : triangles) {
-                    auto color = tria.color.to_array();
-
-                    glUniform4fv(color_loc, 1, color.data());
-                    float pixelX = (float)windowWidth / 2.0f + tria.position.x;
-                    float pixelY = (float)height - (float)windowHeight / 2.0f + tria.position.y;
-
-                    glUniform2f(
-                        position_loc,
-                        // NDC is -1 ~ 1, so I doubled it
-                        2.0f * pixelX / (float)width - 1.0f,
-                        2.0f * pixelY / (float)height - 1.0f
-                    );
-                    glUniform2f(
-                        scale_loc,
-                        (float)windowHeight / (float)width,
-                        (float)windowHeight / (float)height
-                    );
-
-                    glBindVertexArray(tria.vao_id);
-                    glDrawArrays(GL_TRIANGLES, 0, 3);
-                }
-
-                break;
-            }
-
-            default: {
-                if (!warnOnce) {
-                    print("Warning: Unknown draw mode recieved!\n");
-                    warnOnce = true;
-                }
-                break;
-            }
+        for (const auto& rect: rectangles) {
+            drawTriangle(rect.t0, width, height);
+            drawTriangle(rect.t1, width, height);
         }
 
         glfwSwapBuffers(window);
@@ -290,9 +306,18 @@ public:
     }
 
     ~Renderer() {
-        for (const auto& tria : triangles) {
+        auto freeTriangle = [](const Tria& tria) {
             glDeleteBuffers(1, &tria.vbo_id);
             glDeleteVertexArrays(1, &tria.vao_id);
+        };
+
+        for (const auto& tria : triangles) {
+            freeTriangle(tria);
+        }
+
+        for (auto& rect : rectangles) {
+            freeTriangle(rect.t0);
+            freeTriangle(rect.t1);
         }
 
         if (program != 0) {
