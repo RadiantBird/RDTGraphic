@@ -17,8 +17,8 @@ using std::print;
 
 template <typename T>
 void unpackAndPush(vector<T>& target, vector<T>&& pushing) {
-    for (auto v : pushing) {
-        target.push_back(v);
+    for (auto& v : pushing) {
+        target.push_back(std::move(v));
     }
 }
 
