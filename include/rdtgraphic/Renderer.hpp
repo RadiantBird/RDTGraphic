@@ -16,9 +16,10 @@ layout (location = 0) in vec2 aPos;
 
 uniform vec2 position;
 uniform vec2 vertexScale;
+uniform float zPosition;
 
 void main() {
-    gl_Position = vec4(aPos * vertexScale + position, 0.0, 1.0);
+    gl_Position = vec4(aPos * vertexScale + position, zPosition, 1.0);
 }
 )";
 
@@ -51,6 +52,7 @@ class Renderer {
     GLint color_loc = -1;
     GLint position_loc = -1;
     GLint scale_loc = -1;
+    GLint zPosition_loc = -1;
 
     int windowHeight = 600;
     int windowWidth  = 800;
@@ -129,6 +131,7 @@ public:
             std::cerr << "Failed to initialize GLFW\n";
             return false;
         }
+
         drawmode = m;
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -144,6 +147,11 @@ public:
         }
 
         glfwMakeContextCurrent(window);
+        // make sure do setting after making context window!
+        glEnable(GL_DEPTH_TEST); // THIRD DIMENTION!
+        glDepthFunc(GL_LESS); // -Z is front
+        glClearDepth(1.0f);
+
         glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int, int action, int) {
             if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -195,6 +203,7 @@ public:
         color_loc = glGetUniformLocation(program, "color");
         position_loc = glGetUniformLocation(program, "position");
         scale_loc = glGetUniformLocation(program, "vertexScale");
+        zPosition_loc = glGetUniformLocation(program, "zPosition");
 
         glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
         
@@ -239,6 +248,7 @@ private:
                 tria.position.y
             );
             glUniform2f(scale_loc, 1.0f, 1.0f);
+            glUniform1f(zPosition_loc, tria.zPosition);
         }
         else if (drawmode == DrawMode::Pixel) {
             float pixelX = (float)windowWidth / 2.0f + tria.position.x;
@@ -255,6 +265,7 @@ private:
                 2.0f / (float)width,
                 2.0f / (float)height
             );
+            glUniform1f(zPosition_loc, tria.zPosition);
         }
         else {
             if (!warnOnce) {
@@ -288,7 +299,7 @@ public:
         zeroSizeWarn = false; // Because it escaped from the zero conditions
 
         glClearColor(0.0f, 0.5f, 0.5f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(program);
 

@@ -35,21 +35,24 @@ struct Tria {
     uint32_t vao_id;
     uint32_t vbo_id;
     Color4 color;
+    float zPosition = 0.0f;
 
     Tria(): 
         position{0.0f, 0.0f},
         vertices{},
         vao_id(0),
         vbo_id(0),
-        color(1.0f, 0.0f, 1.0f, 1.0f) 
+        color(1.0f, 0.0f, 1.0f, 1.0f),
+        zPosition(0.0f)
     {}
 
-    Tria(Vector2 position, std::array<float, 6> vertices, Color4 color):
+    Tria(Vector2 position, std::array<float, 6> vertices, Color4 color, float zPosition = 0.0f):
         position(position),
         vertices(vertices),
         vao_id(0),
         vbo_id(0),
-        color(color)
+        color(color),
+        zPosition(zPosition)
     {}
 };
 

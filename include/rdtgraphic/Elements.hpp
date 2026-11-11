@@ -30,12 +30,12 @@ struct Rect {
             -size.x, -size.y,
             size.x, -size.y,
             size.x,  size.y
-        }, color),
+        }, color, 0.5f), // zPosition = -1.0f for test
         t1(position, {
             -size.x, -size.y,
             size.x,  size.y,
             -size.x,  size.y
-        }, color),
+        }, color, 0.5f),
         color(color)
     {}
 };
